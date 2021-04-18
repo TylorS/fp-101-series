@@ -1,6 +1,4 @@
 import React from 'react'
-import { ADTsComponent } from './1st-episode-ADTs/ADTsComponent'
-import { EitherFormValidation } from './3rd-episode-either-form-validation'
 import { TaskEitherExample } from './4th-episode-taskeither'
 
 import './App.css'

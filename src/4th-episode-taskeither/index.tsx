@@ -9,8 +9,11 @@ import type { Task } from 'fp-ts/lib/Task'
 
 import './styles.css'
 
-const LIST_ALL_PEOPLE_URL = 'https://swapi.dev/api/people'
-const PERSON_COUNT = 10
+const LIST_ALL_PEOPLE_URL = 'https://swapi.dev/api/people' // Our Main API to request for
+const MAX_PERSON_RESPONSE_COUNT = 10 // The max number of people returned in a given response
+
+const delay = (ms: number): Task<void> => () =>
+  new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
  * TaskEither example using fetch requests and the Star Wars API. It requests
@@ -22,20 +25,22 @@ export const TaskEitherExample = () => {
   // Track the currently selected person
   const [person, setPerson] = React.useState<O.Option<Person>>(O.none)
   // Track the current page for pagination
-  const [page, setPage] = React.useState(1)
-  // Go back, but no less than 1
-  const back = React.useCallback(() => setPage((x) => Math.max(x - 1, 1)), [])
-  // Go forwards
-  const forward = React.useCallback(
-    () => setPage((x) => Math.max(x + 1, 0)),
-    [],
-  )
+  const { page, back, forward } = usePagination()
 
   // Request for people given the page that we are currently on
-  React.useEffect(
-    () => getPeople(makeRequest(createPeopleUrl(page), peoplePayloadDecoder)),
-    [page],
-  )
+  React.useEffect(() => {
+    const controller = new AbortController()
+
+    getPeople(
+      makeRequest(
+        createPeopleUrl(page),
+        peoplePayloadDecoder,
+        controller.signal,
+      ),
+    )
+
+    return () => controller.abort()
+  }, [page])
 
   return (
     <section>
@@ -45,81 +50,21 @@ export const TaskEitherExample = () => {
         renderNone,
         renderLoading,
         renderError,
-        ({ count, results: people }, isLoading) =>
+        ({ count, results }, isLoading) =>
           pipe(
             person,
             O.match(
-              () => {
-                // Determine the range of values
-                const start = Math.min(page * PERSON_COUNT, count)
-                const end = Math.min(start + people.length, count)
-
-                return (
-                  <>
-                    <section className="PersonSection">
-                      {isLoading ? (
-                        renderLoading()
-                      ) : (
-                        <PersonList
-                          people={people}
-                          selectPerson={flow(O.some, setPerson)}
-                        />
-                      )}
-                    </section>
-
-                    <footer>
-                      <p>
-                        Showing{' '}
-                        <span>
-                          {start}-{end}
-                        </span>{' '}
-                        of {count}
-                      </p>
-
-                      <div className="Pagination">
-                        <button
-                          type="button"
-                          className="Pagination__button Left"
-                          disabled={page === 1}
-                          onClick={back}
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
-                            aria-hidden="true"
-                          >
-                            <path
-                              fill-rule="evenodd"
-                              d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
-                              clip-rule="evenodd"
-                            />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          className="Pagination__button Forward"
-                          disabled={end === count}
-                          onClick={forward}
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
-                            aria-hidden="true"
-                          >
-                            <path
-                              fill-rule="evenodd"
-                              d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-                              clip-rule="evenodd"
-                            />
-                          </svg>
-                        </button>
-                      </div>
-                    </footer>
-                  </>
-                )
-              },
+              () => (
+                <PeopleView
+                  people={results}
+                  isLoading={isLoading}
+                  setPerson={setPerson}
+                  page={page}
+                  back={back}
+                  forward={forward}
+                  count={count}
+                />
+              ),
               (person) => (
                 <PersonView
                   key={person.name}
@@ -131,6 +76,99 @@ export const TaskEitherExample = () => {
           ),
       )}
     </section>
+  )
+}
+
+type PeopleViewProps = {
+  people: Array<Person>
+  setPerson: (person: O.Option<Person>) => void
+  isLoading: boolean
+  count: number
+  page: number
+  back: () => void
+  forward: () => void
+}
+
+/**
+ *
+ * @param props
+ * @returns
+ */
+const PeopleView = (props: PeopleViewProps) => {
+  const { people, isLoading, setPerson, page, back, forward, count } = props
+
+  // Determine the current range of values
+  const start = React.useMemo(
+    () => Math.min(page * MAX_PERSON_RESPONSE_COUNT, count),
+    [page, count],
+  )
+  const end = React.useMemo(() => Math.min(start + people.length, count), [
+    start,
+    people.length,
+    count,
+  ])
+
+  return (
+    <>
+      <section className="PersonSection">
+        {isLoading ? (
+          renderLoading()
+        ) : (
+          <PersonList people={people} selectPerson={flow(O.some, setPerson)} />
+        )}
+      </section>
+
+      <footer>
+        <p>
+          Showing{' '}
+          <span>
+            {start}-{end}
+          </span>{' '}
+          of {count}
+        </p>
+
+        <div className="Pagination">
+          <button
+            type="button"
+            className="Pagination__button Left"
+            disabled={page === 1}
+            onClick={back}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="Pagination__button Forward"
+            disabled={end === count}
+            onClick={forward}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          </button>
+        </div>
+      </footer>
+    </>
   )
 }
 
@@ -240,6 +278,20 @@ const renderNone = () => null
 const renderError = (error: Error) => <section>{error.message}</section>
 const renderLoading = () => <p>Loading...</p>
 
+const usePagination = () => {
+  // Track the current page for pagination
+  const [page, setPage] = React.useState(1)
+  // Go back, but no less than 1
+  const back = React.useCallback(() => setPage((x) => Math.max(x - 1, 1)), [])
+  // Go forwards
+  const forward = React.useCallback(
+    () => setPage((x) => Math.max(x + 1, 1)),
+    [],
+  )
+
+  return { page, back, forward } as const
+}
+
 /**
  * Constructs a TaskEither that is capable of making a GET request that
  * will use the provided Decoder to validate the current type. Optionally
@@ -248,7 +300,7 @@ const renderLoading = () => <p>Loading...</p>
 function makeRequest<A>(
   url: string,
   decoder: D.Decoder<unknown, A>,
-  signal?: AbortSignal,
+  signal: AbortSignal,
 ): TE.TaskEither<Error, A> {
   return TE.tryCatch(
     async () => {
@@ -317,13 +369,9 @@ function useTaskEither<E, A>(timeToLoad: number) {
   return [match, run] as const
 }
 
-const delay = (ms: number): Task<void> => () =>
-  new Promise((resolve) => setTimeout(resolve, ms))
-
 const filmDecoder = D.type({
   title: D.string,
   episode_id: D.number,
-  url: D.string,
 })
 
 type Film = D.TypeOf<typeof filmDecoder>
@@ -343,4 +391,4 @@ const peoplePayloadDecoder = D.type({
   ),
 })
 
-export type PeoplePayload = D.TypeOf<typeof peoplePayloadDecoder>
+type PeoplePayload = D.TypeOf<typeof peoplePayloadDecoder>
