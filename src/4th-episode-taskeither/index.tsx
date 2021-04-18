@@ -3,7 +3,7 @@ import * as TE from 'fp-ts/TaskEither'
 import * as D from 'io-ts/Decoder'
 import * as E from 'fp-ts/Either'
 import * as O from 'fp-ts/Option'
-import * as A from 'fp-ts/Array'
+import * as RA from 'fp-ts/ReadonlyArray'
 import { flow, pipe } from 'fp-ts/function'
 import type { Task } from 'fp-ts/lib/Task'
 
@@ -80,7 +80,7 @@ export const TaskEitherExample = () => {
 }
 
 type PeopleViewProps = {
-  people: Array<Person>
+  people: ReadonlyArray<Person>
   setPerson: (person: O.Option<Person>) => void
   isLoading: boolean
   count: number
@@ -182,7 +182,7 @@ const createPeopleUrl = (page: number) => {
 }
 
 type PersonListProps = {
-  people: Array<Person>
+  people: ReadonlyArray<Person>
   selectPerson: (person: Person) => void
 }
 
@@ -230,7 +230,7 @@ const PersonView = ({ person, goBack }: PersonViewProps) => {
 
     pipe(
       person.films,
-      A.map((filmUrl) => makeRequest(filmUrl, filmDecoder, controller.signal)),
+      RA.map((filmUrl) => makeRequest(filmUrl, filmDecoder, controller.signal)),
       TE.sequenceArray,
       getFilms,
     )
@@ -391,7 +391,8 @@ const peoplePayloadDecoder = D.type({
   count: D.number,
   results: pipe(
     D.array(peopleDecoder),
-    D.refine(A.isNonEmpty, 'NonEmptyArray'),
+    D.readonly,
+    D.refine(RA.isNonEmpty, 'NonEmptyArray'),
   ),
 })
 
