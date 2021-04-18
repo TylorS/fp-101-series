@@ -43,7 +43,7 @@ export const TaskEitherExample = () => {
   }, [page])
 
   return (
-    <section>
+    <section className="Host">
       <h1>Star Wars {O.isSome(person) ? 'Films' : 'Characters'}</h1>
 
       {matchPeople(
@@ -276,7 +276,11 @@ type PersonViewProps = {
 // Really basic rendering helpers
 const renderNone = () => null
 const renderError = (error: Error) => <section>{error.message}</section>
-const renderLoading = () => <p>Loading...</p>
+const renderLoading = () => (
+  <div className="Loading">
+    <p>Loading...</p>
+  </div>
+)
 
 const usePagination = () => {
   // Track the current page for pagination
